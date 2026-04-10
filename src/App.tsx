@@ -8,9 +8,17 @@ type RemoteModule = {
   }
 }
 
+declare global {
+  interface Window {
+    $RefreshReg$?: (type: unknown, id: string) => void
+    $RefreshSig$?: () => <T>(type: T) => T
+    __vite_plugin_react_preamble_installed__?: boolean
+  }
+}
+
 export default function App() {
   const params = useMemo(() => new URLSearchParams(window.location.search), [])
-  const remoteHost = params.get('host') || 'http://localhost:5173'
+  const remoteHost = params.get('host') || 'http://localhost:5172'
 
   const [RemoteComp, setRemoteComp] =
     useState<React.ComponentType<{ text?: string }> | null>(null)
@@ -20,11 +28,24 @@ export default function App() {
   useEffect(() => {
     let cancelled = false
 
+    async function installReactRefreshPreamble() {
+      await import(/* @vite-ignore */ `${remoteHost}/@vite/client`)
+
+      const refreshRuntime = await import(
+        /* @vite-ignore */ `${remoteHost}/@react-refresh`
+      )
+
+      refreshRuntime.default.injectIntoGlobalHook(window)
+      window.$RefreshReg$ = () => {}
+      window.$RefreshSig$ = () => (type) => type
+      window.__vite_plugin_react_preamble_installed__ = true
+    }
+
     async function loadRemote() {
       try {
         setError('')
 
-        await import(/* @vite-ignore */ `${remoteHost}/@vite/client`)
+        await installReactRefreshPreamble()
 
         const mod = (await import(
           /* @vite-ignore */ `${remoteHost}/src/widget.tsx`
